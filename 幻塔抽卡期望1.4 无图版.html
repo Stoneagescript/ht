@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>幻塔卡池模拟器</title>
+    <style>
+        .gacha-simulator {
+            font-family: Arial, sans-serif;
+            background-color: #2C3E50;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 600px;
+            margin: 20px auto;
+            text-align: center;
+        }
+        .gacha-simulator h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .gacha-simulator label {
+            display: block;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        .gacha-simulator input[type="number"],
+        .gacha-simulator select {
+            padding: 10px;
+            width: 80%;
+            max-width: 300px;
+            border: none;
+            border-radius: 5px;
+            background-color: #34495E;
+            color: white;
+        }
+        .gacha-simulator button {
+            padding: 10px 20px;
+            background-color: #3498DB;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        .gacha-simulator button:hover {
+            background-color: #2980B9;
+        }
+        .gacha-simulator .result {
+            margin-top: 20px;
+            font-size: 16px;
+            background-color: #34495E;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="gacha-simulator">
+        <h1>🌸 幻塔卡池模拟器 🌸</h1>
+        <label for="history">历史记录（最近3次）：</label>
+        <select id="history">
+            <option value="">请选择历史记录</option>
+            <option value="中中中">中中中</option>
+            <option value="中中歪">中中歪</option>
+            <option value="中歪中">中歪中</option>
+            <option value="中歪歪">中歪歪</option>
+            <option value="歪中中">歪中中</option>
+            <option value="歪中歪">歪中歪</option>
+            <option value="歪歪中">歪歪中</option>
+            <option value="歪歪歪">歪歪歪</option>
+        </select>
+        <label for="pulls">赤核数量：</label>
+        <input id="pulls" type="number" placeholder="请输入你拥有的赤核数量">
+        <label for="target">目标星级：</label>
+        <select id="target">
+            <option value="0">0星</option>
+            <option value="1">1星</option>
+            <option value="2">2星</option>
+            <option value="3">3星</option>
+            <option value="4">4星</option>
+            <option value="5">5星</option>
+            <option value="6">6星</option>
+        </select>
+        <button onclick="simulate()">开始模拟</button>
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        function parseHistory(historyStr) {
+            const validChars = [...historyStr].filter(c => c === '中' || c === '歪').slice(-3);
+            const state = { pity: 0, consecLimited: 0, consecStandard: 0 };
+            for (const char of validChars.reverse()) {
+                if (char === '中') {
+                    if (state.consecStandard >= 2) {
+                        state.consecLimited = 1;
+                        state.consecStandard = 0;
+                    } else {
+                        state.consecLimited += 1;
+                        state.consecStandard = 0;
+                    }
+                    state.pity = 0;
+                } else if (char === '歪') {
+                    if (state.consecLimited >= 2) {
+                        state.consecStandard = 1;
+                        state.consecLimited = 0;
+                    } else {
+                        state.consecStandard += 1;
+                        state.consecLimited = 0;
+                    }
+                    state.pity = 0;
+                }
+            }
+            return state;
+        }
+
+        function simulateGacha(pulls, initState) {
+            let currentState = { ...initState };
+            let limitedCount = 0;
+            for (let i = 0; i < pulls; i++) {
+                if (currentState.consecStandard >= 2) {
+                    limitedCount += 1;
+                    currentState.consecLimited = 1;
+                    currentState.consecStandard = 0;
+                    currentState.pity = 0;
+                    continue;
+                }
+                if (currentState.consecLimited >= 2) {
+                    currentState.consecStandard = 1;
+                    currentState.consecLimited = 0;
+                    currentState.pity = 0;
+                    continue;
+                }
+                const hit = currentState.pity >= 79 || Math.random() < 0.0075;
+                if (hit) {
+                    if (Math.random() < 0.5) {
+                        limitedCount += 1;
+                        currentState.consecLimited += 1;
+                        currentState.consecStandard = 0;
+                    } else {
+                        currentState.consecStandard += 1;
+                        currentState.consecLimited = 0;
+                    }
+                    currentState.pity = 0;
+                } else {
+                    currentState.pity += 1;
+                }
+                if ((currentState.pity + 1) % 110 === 0) {
+                    limitedCount += 1;
+                }
+            }
+            return limitedCount;
+        }
+
+        function calculateCoinExchange(totalPulls) {
+            return Math.floor(totalPulls / 110);
+        }
+
+        function calculateSuccessRate(pulls, target, coinExchange, historyState) {
+            let success = 0;
+            for (let i = 0; i < 1000; i++) {
+                const limitedCount = simulateGacha(pulls, historyState);
+                if (limitedCount + coinExchange >= target) {
+                    success += 1;
+                }
+            }
+            return success / 1000;
+        }
+
+        function recommendTarget(totalPulls, targetStar, coinExchange, historyState) {
+            const starToPulls = { 0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7 };
+            const targetPulls = starToPulls[targetStar];
+            const successRate = calculateSuccessRate(totalPulls, targetPulls, coinExchange, historyState);
+            if (successRate >= 0.5) {
+                return `推荐目标：${targetStar} 星（需抽 ${targetPulls} 把，综合成功率：${(successRate * 100).toFixed(1)}%）`;
+            }
+            if (targetStar === 5) {
+                const successRate3 = calculateSuccessRate(totalPulls, starToPulls[3], coinExchange, historyState);
+                if (successRate3 >= 0.5) {
+                    return `推荐目标：3 星（需抽 ${starToPulls[3]} 把，综合成功率：${(successRate3 * 100).toFixed(1)}%）`;
+                } else {
+                    const successRate1 = calculateSuccessRate(totalPulls, starToPulls[1], coinExchange, historyState);
+                    return `推荐目标：1 星（需抽 ${starToPulls[1]} 把，综合成功率：${(successRate1 * 100).toFixed(1)}%）`;
+                }
+            } else if (targetStar === 6) {
+                const successRate5 = calculateSuccessRate(totalPulls, starToPulls[5], coinExchange, historyState);
+                if (successRate5 >= 0.5) {
+                    return `推荐目标：5 星（需抽 ${starToPulls[5]} 把，综合成功率：${(successRate5 * 100).toFixed(1)}%）`;
+                } else {
+                    const successRate3 = calculateSuccessRate(totalPulls, starToPulls[3], coinExchange, historyState);
+                    if (successRate3 >= 0.5) {
+                        return `推荐目标：3 星（需抽 ${starToPulls[3]} 把，综合成功率：${(successRate3 * 100).toFixed(1)}%）`;
+                    } else {
+                        const successRate1 = calculateSuccessRate(totalPulls, starToPulls[1], coinExchange, historyState);
+                        return `推荐目标：1 星（需抽 ${starToPulls[1]} 把，综合成功率：${(successRate1 * 100).toFixed(1)}%）`;
+                    }
+                }
+            }
+            return `推荐目标：${targetStar} 星（需抽 ${targetPulls} 把，综合成功率：${(successRate * 100).toFixed(1)}%）`;
+        }
+
+        function simulate() {
+            const history = document.getElementById('history').value;
+            const pulls = parseInt(document.getElementById('pulls').value);
+            const targetStar = parseInt(document.getElementById('target').value);
+
+            if (!history || isNaN(pulls) || isNaN(targetStar)) {
+                alert("请输入完整信息！");
+                return;
+            }
+
+            const historyState = parseHistory(history);
+            const coinExchange = calculateCoinExchange(pulls);
+            const newLimited = simulateGacha(pulls, historyState);
+            const recommendation = recommendTarget(pulls, targetStar, coinExchange, historyState);
+            const successRate = calculateSuccessRate(pulls, targetStar, coinExchange, historyState);
+
+            document.getElementById('result').innerHTML = `
+                <p>铸币可兑换限定：${coinExchange}个</p>
+                <p>预计新增限定：${newLimited} ± 1个</p>
+                <p>${recommendation}</p>
+                <p>综合成功率：${(successRate * 100).toFixed(1)}%</p>
+            `;
+        }
+    </script>
+</body>
+</html>
